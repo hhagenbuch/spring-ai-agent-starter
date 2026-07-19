@@ -60,9 +60,11 @@ jobs:
 
           reply=$(echo "$resp" | jq -r '.reply')
           tools=$(echo "$resp" | jq -r '.toolsUsed | join(",")')
+          # Strip formatting so "468,013" / "468 013" match the expected digits.
+          reply_digits=$(echo "$reply" | tr -cd '0-9')
 
           fail=0
-          if ! echo "$reply" | grep -q '468013'; then
+          if ! echo "$reply_digits" | grep -q '468013'; then
             echo "::error::reply did not contain the expected answer 468013"; fail=1
           fi
           if ! echo "$tools" | grep -q 'calculator'; then
