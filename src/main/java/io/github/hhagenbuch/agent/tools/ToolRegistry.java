@@ -1,0 +1,38 @@
+package io.github.hhagenbuch.agent.tools;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
+
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Discovers all {@link AgentTool} beans and dispatches tool calls.
+ * Unknown tools and tool failures are converted to error strings rather than
+ * propagated — the model should see the failure and recover, not crash the loop.
+ */
+@Component
+public class ToolRegistry {
+
+    private final Map<String, AgentTool> tools = new LinkedHashMap<>();
+
+    public ToolRegistry(List<AgentTool> discovered) {
+        discovered.forEach(t -> tools.put(t.name(), t));
+    }
+
+    public Collection<AgentTool> all() {
+        return tools.values();
+    }
+
+    public Mono<String> execute(String name, JsonNode input) {
+        AgentTool tool = tools.get(name);
+        if (tool == null) {
+            return Mono.just("ERROR: unknown tool '" + name + "'");
+        }
+        return tool.execute(input)
+                .onErrorResume(e -> Mono.just("ERROR: tool '" + name + "' failed: " + e.getMessage()));
+    }
+}
