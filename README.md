@@ -120,6 +120,9 @@ skipped, never crashing the agent.
 - [x] MCP client: mount any MCP server's tools as `AgentTool`s
 - [ ] Single-pass streaming: stream from the first model call, buffering
       `tool_use` events, to drop the 2× token cost of the resolve-then-stream path
+- [ ] Treat an MCP `tools/call` timeout as fatal for that client (kill the
+      process, drop/reconnect its tools) instead of leaving the read thread
+      parked on the pipe holding the request lock
 - [ ] Structured output mode (JSON schema-constrained answers)
 - [ ] Eval gate in CI via [agent-evals](https://github.com/hhagenbuch/agent-evals)
 

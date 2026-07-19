@@ -62,6 +62,14 @@ final class McpToolAdapter implements AgentTool {
                 // A hung server would otherwise block the chat request indefinitely.
                 // ToolRegistry.execute turns this into an "ERROR: ..." string, so the
                 // model sees the timeout and can recover instead of the request hanging.
+                //
+                // Known limitation: this bounds the *request*, not the *client*. The
+                // cancelled thread is still parked in readLine() on the process pipe
+                // holding McpClient's request lock (pipe reads aren't interruptible),
+                // so every later call to this server queues behind the dead read and
+                // eats its own timeout — degraded but bounded. The real fix is to treat
+                // a timeout as fatal for the client: destroy the process and drop or
+                // reconnect its tools (see roadmap).
                 .timeout(CALL_TIMEOUT);
     }
 
