@@ -35,7 +35,7 @@ class AgentLoopTest {
         AgentLoop loop = new AgentLoop(fake, registry, memory, props, mapper);
 
         StepVerifier.create(loop.run("s1", "hi"))
-                .expectNext("Hello there")
+                .expectNextMatches(r -> r.answer().equals("Hello there") && r.toolsUsed().isEmpty())
                 .verifyComplete();
         assertThat(memory.history("s1")).hasSize(2); // user + assistant
     }
@@ -48,7 +48,8 @@ class AgentLoopTest {
         AgentLoop loop = new AgentLoop(fake, registry, memory, props, mapper);
 
         StepVerifier.create(loop.run("s2", "what is 2+2?"))
-                .expectNext("The answer is 4")
+                .expectNextMatches(r -> r.answer().equals("The answer is 4")
+                        && r.toolsUsed().equals(List.of("calculator")))
                 .verifyComplete();
         // user, assistant(tool_use), user(tool_result), assistant(final)
         assertThat(memory.history("s2")).hasSize(4);
@@ -61,7 +62,7 @@ class AgentLoopTest {
         AgentLoop loop = new AgentLoop(alwaysCallsTools, registry, memory, props, mapper);
 
         StepVerifier.create(loop.run("s3", "loop forever"))
-                .expectNextMatches(s -> s.startsWith("Stopped: exceeded"))
+                .expectNextMatches(r -> r.answer().startsWith("Stopped: exceeded"))
                 .verifyComplete();
     }
 

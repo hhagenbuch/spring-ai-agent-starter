@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -39,12 +40,15 @@ public class AgentLoop {
         this.mapper = mapper;
     }
 
-    public Mono<String> run(String sessionId, String userMessage) {
+    public Mono<AgentResult> run(String sessionId, String userMessage) {
         List<ObjectNode> messages = memory.history(sessionId);
         messages.add(textMessage("user", userMessage));
-        return step(messages, 0)
-                .onErrorResume(e -> Mono.just(
-                        "I hit an internal error and could not complete that request: " + e.getMessage()));
+        List<String> toolsUsed = new ArrayList<>();
+        return step(messages, 0, toolsUsed)
+                .map(answer -> new AgentResult(answer, List.copyOf(toolsUsed)))
+                .onErrorResume(e -> Mono.just(new AgentResult(
+                        "I hit an internal error and could not complete that request: " + e.getMessage(),
+                        List.copyOf(toolsUsed))));
     }
 
     /**
@@ -78,13 +82,13 @@ public class AgentLoop {
                         return Mono.just(messages);
                     }
                     messages.add(assistantMessage(response));
-                    return executeTools(response.toolCalls())
+                    return executeTools(response.toolCalls(), new ArrayList<>())
                             .doOnNext(messages::add)
                             .then(Mono.defer(() -> resolveTools(messages, depth + 1)));
                 });
     }
 
-    private Mono<String> step(List<ObjectNode> messages, int depth) {
+    private Mono<String> step(List<ObjectNode> messages, int depth, List<String> toolsUsed) {
         if (depth >= props.maxToolIterations()) {
             return Mono.just("Stopped: exceeded the maximum of "
                     + props.maxToolIterations() + " tool iterations.");
@@ -95,17 +99,18 @@ public class AgentLoop {
                     if (!response.wantsTools()) {
                         return Mono.just(response.text());
                     }
-                    return executeTools(response.toolCalls())
+                    return executeTools(response.toolCalls(), toolsUsed)
                             .map(results -> {
                                 messages.add(results);
                                 return results;
                             })
-                            .then(Mono.defer(() -> step(messages, depth + 1)));
+                            .then(Mono.defer(() -> step(messages, depth + 1, toolsUsed)));
                 });
     }
 
     /** Runs all requested tool calls concurrently, preserving call order in the result message. */
-    private Mono<ObjectNode> executeTools(List<ToolCall> calls) {
+    private Mono<ObjectNode> executeTools(List<ToolCall> calls, List<String> toolsUsed) {
+        calls.forEach(call -> toolsUsed.add(call.name()));
         return Flux.fromIterable(calls)
                 .flatMap(call -> registry.execute(call.name(), call.input())
                         .map(result -> toolResultBlock(call.id(), result)))

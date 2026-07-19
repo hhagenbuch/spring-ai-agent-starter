@@ -36,7 +36,7 @@ public class ChatController {
                 ? request.sessionId()
                 : UUID.randomUUID().toString();
         return agentLoop.run(sessionId, request.message())
-                .map(reply -> new ChatResponse(sessionId, reply));
+                .map(result -> new ChatResponse(sessionId, result.answer(), result.toolsUsed()));
     }
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
