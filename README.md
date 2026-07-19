@@ -37,7 +37,14 @@ ChatController ──► AgentLoop ──► LlmClient (Anthropic, retry/backoff
   backoff on 429/5xx. The loop is tested against a fake, so `mvn test` needs
   no key and no network.
 - **`ConversationMemory`** — in-memory per-session history behind a tiny
-  interface; swap for Redis/Postgres for multi-instance deployments.
+  interface; swap for Redis/Postgres for multi-instance deployments. A failed
+  turn is rolled back and re-recorded as a clean `user → fallback` pair, so one
+  transient error can't leave a dangling turn that breaks the whole session.
+
+> **Known limitation:** history is not serialized per session, so two
+> concurrent requests on the *same* `sessionId` can interleave their turns in
+> memory. Fine for one caller per session; a shared-session workload needs a
+> per-session lock (or the Redis/Postgres swap above).
 
 ## Run it
 
