@@ -3,6 +3,8 @@ package io.github.hhagenbuch.agent.mcp;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -23,6 +25,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 final class McpClient implements AutoCloseable {
 
+    private static final Logger log = LoggerFactory.getLogger(McpClient.class);
+
     private final Process process;
     private final BufferedWriter stdin;
     private final BufferedReader stdout;
@@ -35,6 +39,29 @@ final class McpClient implements AutoCloseable {
         this.process = new ProcessBuilder(command).start();
         this.stdin = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
         this.stdout = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+        drainStderr(command);
+    }
+
+    /**
+     * Continuously drains the child's stderr on a daemon thread. Without this,
+     * a chatty MCP server fills the OS pipe buffer and then blocks forever on
+     * its next stderr write — deadlocking the whole handshake. We log each line
+     * at debug so server diagnostics are still recoverable.
+     */
+    private void drainStderr(List<String> command) {
+        Thread drainer = new Thread(() -> {
+            try (BufferedReader stderr = new BufferedReader(
+                    new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = stderr.readLine()) != null) {
+                    log.debug("[mcp:{}] {}", command.get(0), line);
+                }
+            } catch (IOException ignored) {
+                // stream closed as the process exits — nothing to do
+            }
+        }, "mcp-stderr-" + command.get(0));
+        drainer.setDaemon(true);
+        drainer.start();
     }
 
     /** Performs the MCP handshake and returns the discovered tool definitions. */

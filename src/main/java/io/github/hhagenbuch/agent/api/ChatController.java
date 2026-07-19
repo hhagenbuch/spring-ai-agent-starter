@@ -39,6 +39,9 @@ public class ChatController {
                 .map(result -> new ChatResponse(sessionId, result.answer(), result.toolsUsed()));
     }
 
+    // SSE over GET keeps the browser EventSource client trivial, but the message
+    // rides in the query string and so lands in access logs / proxy logs. Fine for
+    // a demo; a production build should POST the prompt (or use WebSocket) instead.
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> stream(@RequestParam String message,
                                                 @RequestParam(required = false) String sessionId) {
