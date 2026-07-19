@@ -42,13 +42,13 @@ public class AgentLoop {
 
     public Mono<AgentResult> run(String sessionId, String userMessage) {
         List<ObjectNode> messages = memory.history(sessionId);
+        int mark = messages.size();
         messages.add(textMessage("user", userMessage));
         List<String> toolsUsed = new ArrayList<>();
         return step(messages, 0, toolsUsed)
                 .map(answer -> new AgentResult(answer, List.copyOf(toolsUsed)))
                 .onErrorResume(e -> Mono.just(new AgentResult(
-                        "I hit an internal error and could not complete that request: " + e.getMessage(),
-                        List.copyOf(toolsUsed))));
+                        recordFailure(messages, mark, userMessage, e), List.copyOf(toolsUsed))));
     }
 
     /**
@@ -59,19 +59,42 @@ public class AgentLoop {
      * <p>The deltas are accumulated and the full answer is appended to
      * {@link ConversationMemory} once the stream completes, so a streamed turn
      * is remembered exactly like a non-streamed one — the next request sees a
-     * well-formed transcript, not a dangling user/tool_result turn. Nothing is
-     * persisted if the stream errors, so a failed turn never poisons memory.
+     * well-formed transcript, not a dangling user/tool_result turn. On error the
+     * turn is recorded as a clean {@code user → assistant(fallback)} pair (see
+     * {@link #recordFailure}), so a failed stream can't poison the session either.
      */
     public Flux<String> runStreaming(String sessionId, String userMessage) {
         List<ObjectNode> messages = memory.history(sessionId);
+        int mark = messages.size();
         messages.add(textMessage("user", userMessage));
         StringBuilder answer = new StringBuilder();
         return resolveTools(messages, 0)
                 .flatMapMany(ready -> llm.chatStream(ready, registry.all()))
                 .doOnNext(answer::append)
                 .doOnComplete(() -> messages.add(textMessage("assistant", answer.toString())))
-                .onErrorResume(e -> Flux.just(
-                        "I hit an internal error and could not complete that request: " + e.getMessage()));
+                .onErrorResume(e -> Flux.just(recordFailure(messages, mark, userMessage, e)));
+    }
+
+    /**
+     * Records a failed turn as a clean {@code user → assistant(fallback)} exchange.
+     * We roll the history back to where this call started (dropping the user turn
+     * and any partial tool_use/tool_result turns) and re-append the question with
+     * the fallback the caller actually saw. This keeps memory strictly alternating
+     * — without it, a single transient failure leaves a dangling user/tool_result
+     * turn and every later request on the session is rejected by the API.
+     */
+    private String recordFailure(List<ObjectNode> messages, int mark, String userMessage, Throwable e) {
+        String text = "I hit an internal error and could not complete that request: " + e.getMessage();
+        rollbackTo(messages, mark);
+        messages.add(textMessage("user", userMessage));
+        messages.add(textMessage("assistant", text));
+        return text;
+    }
+
+    private void rollbackTo(List<ObjectNode> messages, int mark) {
+        while (messages.size() > mark) {
+            messages.remove(messages.size() - 1);
+        }
     }
 
     /**

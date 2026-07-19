@@ -89,6 +89,57 @@ class AgentLoopTest {
         assertThat(memory.history("s4").get(1).path("content").asText()).isEqualTo("Hello world");
     }
 
+    @Test
+    void errorDoesNotBrickTheSessionForFollowUps() {
+        AtomicInteger calls = new AtomicInteger();
+        // first call fails mid-turn; later calls succeed
+        LlmClient flaky = (messages, tools) -> calls.getAndIncrement() == 0
+                ? Mono.error(new RuntimeException("boom"))
+                : Mono.just(textResponse("recovered"));
+        AgentLoop loop = new AgentLoop(flaky, registry, memory, props, mapper);
+
+        StepVerifier.create(loop.run("s5", "first"))
+                .expectNextMatches(r -> r.answer().contains("internal error"))
+                .verifyComplete();
+        // failed turn is recorded as a clean user -> assistant pair, roles alternate
+        assertThat(memory.history("s5")).hasSize(2);
+        assertRolesAlternate(memory.history("s5"));
+
+        // a follow-up on the SAME session still works — history isn't corrupted
+        StepVerifier.create(loop.run("s5", "second"))
+                .expectNextMatches(r -> r.answer().equals("recovered"))
+                .verifyComplete();
+        assertThat(memory.history("s5")).hasSize(4);
+        assertRolesAlternate(memory.history("s5"));
+    }
+
+    @Test
+    void errorAfterAToolCallLeavesNoDanglingTurn() {
+        AtomicInteger calls = new AtomicInteger();
+        // turn 0 asks for a tool; after the tool_result is appended, turn 1 fails
+        LlmClient fake = (messages, tools) -> switch (calls.getAndIncrement()) {
+            case 0 -> Mono.just(calculatorCallResponse());
+            case 1 -> Mono.error(new RuntimeException("boom"));
+            default -> Mono.just(textResponse("recovered"));
+        };
+        AgentLoop loop = new AgentLoop(fake, registry, memory, props, mapper);
+
+        StepVerifier.create(loop.run("s6", "what is 2+2?"))
+                .expectNextMatches(r -> r.answer().contains("internal error"))
+                .verifyComplete();
+        // the partial assistant(tool_use)/tool_result turns are rolled back
+        assertThat(memory.history("s6")).hasSize(2);
+        assertRolesAlternate(memory.history("s6"));
+    }
+
+    private void assertRolesAlternate(List<ObjectNode> history) {
+        for (int i = 1; i < history.size(); i++) {
+            assertThat(history.get(i).path("role").asText())
+                    .as("roles must alternate at index %d", i)
+                    .isNotEqualTo(history.get(i - 1).path("role").asText());
+        }
+    }
+
     private LlmResponse textResponse(String text) {
         ArrayNode content = mapper.createArrayNode();
         ObjectNode block = content.addObject();
