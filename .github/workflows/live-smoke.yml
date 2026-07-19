@@ -1,0 +1,78 @@
+name: Live smoke (real Anthropic round-trip)
+
+# Manual, opt-in end-to-end test against the real Anthropic API.
+# It boots the app, sends one prompt that must trigger the calculator tool,
+# and asserts the agent both used the tool and returned the right answer.
+#
+# Runs on a clean GitHub runner (no corporate TLS proxy in the path), so it is
+# the durable way to prove a real model round-trip without touching a laptop.
+# Requires an ANTHROPIC_API_KEY repository secret
+# (Settings -> Secrets and variables -> Actions -> New repository secret).
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Model to run the smoke against
+        required: false
+        default: claude-sonnet-5
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Boot the agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_MODEL: ${{ inputs.model }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY repository secret is not set — add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          # -Dagent.model lets the dispatch input override the configured model.
+          mvn -B spring-boot:run -Dspring-boot.run.jvmArguments="-Dagent.model=$AGENT_MODEL" > app.log 2>&1 &
+          echo "APP_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Wait for health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+              echo "app is up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::app did not become healthy in time"; cat app.log; exit 1
+
+      - name: Call /api/chat and assert tool use + answer
+        run: |
+          # 973 * 481 = 468013 — large enough that the model must call the calculator.
+          resp=$(curl -fsS -X POST http://localhost:8080/api/chat \
+            -H 'Content-Type: application/json' \
+            -d '{"message":"What is 973 * 481? Use your calculator tool."}')
+          echo "response: $resp"
+
+          reply=$(echo "$resp" | jq -r '.reply')
+          tools=$(echo "$resp" | jq -r '.toolsUsed | join(",")')
+
+          fail=0
+          if ! echo "$reply" | grep -q '468013'; then
+            echo "::error::reply did not contain the expected answer 468013"; fail=1
+          fi
+          if ! echo "$tools" | grep -q 'calculator'; then
+            echo "::error::agent did not use the calculator tool (toolsUsed=$tools)"; fail=1
+          fi
+          if [ "$fail" -ne 0 ]; then
+            echo "---- app.log ----"; cat app.log; exit 1
+          fi
+          echo "✅ live round-trip OK — calculator used, answer 468013 returned"
+
+      - name: Stop the agent
+        if: always()
+        run: kill "$APP_PID" 2>/dev/null || true
