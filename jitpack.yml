@@ -1,0 +1,5 @@
+# Build on JDK 21 so JitPack can publish this as a consumable dependency.
+jdk:
+  - openjdk21
+install:
+  - mvn install -DskipTests
