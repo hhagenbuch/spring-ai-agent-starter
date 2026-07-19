@@ -1,0 +1,12 @@
+agent:
+  api-key: ${ANTHROPIC_API_KEY:}
+  model: claude-sonnet-5
+  max-tokens: 1024
+  max-tool-iterations: 6
+  max-retries: 3
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
