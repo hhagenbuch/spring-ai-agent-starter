@@ -6,7 +6,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.3.5</version>
+    <version>3.5.12</version>
     <relativePath/>
   </parent>
   <groupId>io.github.hhagenbuch</groupId>
@@ -15,7 +15,7 @@
   <name>spring-ai-agent-starter</name>
   <description>Production-shaped agentic service: reactive tool-calling loop on Spring WebFlux</description>
   <properties>
-    <java.version>21</java.version>
+    <java.version>25</java.version>
   </properties>
   <dependencies>
     <dependency>
