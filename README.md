@@ -64,6 +64,25 @@ curl -N localhost:8080/api/chat/stream \
 
 Each `delta` event carries a chunk of the answer as it is generated.
 
+## Mounting MCP servers
+
+Point the agent at any [MCP](https://modelcontextprotocol.io) server and its
+tools join the registry alongside the local ones — the loop can't tell them
+apart:
+
+```yaml
+agent:
+  mcp-servers:
+    - name: filesystem
+      command: [npx, -y, "@modelcontextprotocol/server-filesystem", /tmp]
+```
+
+On startup, `McpConnectionManager` launches each server over stdio, runs the
+JSON-RPC handshake (`initialize` → `tools/list`), and wraps every discovered
+tool as an `McpToolAdapter`. `tools/call` round-trips run off the event loop on
+the bounded-elastic scheduler. A server that fails to start is logged and
+skipped, never crashing the agent.
+
 ## Design decisions
 
 - **Why recursion for the loop?** Each `step` is a `Mono` continuation —
@@ -81,7 +100,7 @@ Each `delta` event carries a chunk of the answer as it is generated.
 - [x] Bounded reactive tool loop with concurrent tool execution
 - [x] Retry/backoff, fallback answers, unit-tested core
 - [x] SSE streaming responses (`text/event-stream`)
-- [ ] MCP client: mount any MCP server's tools as `AgentTool`s
+- [x] MCP client: mount any MCP server's tools as `AgentTool`s
 - [ ] Structured output mode (JSON schema-constrained answers)
 - [ ] Eval gate in CI via [agent-evals](https://github.com/hhagenbuch/agent-evals)
 

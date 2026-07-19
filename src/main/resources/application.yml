@@ -4,6 +4,11 @@ agent:
   max-tokens: 1024
   max-tool-iterations: 6
   max-retries: 3
+  # Mount external MCP servers over stdio; their tools join the registry
+  # alongside the local ones. Example:
+  # mcp-servers:
+  #   - name: filesystem
+  #     command: [npx, -y, "@modelcontextprotocol/server-filesystem", /tmp]
 
 management:
   endpoints:

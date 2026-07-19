@@ -27,6 +27,15 @@ public class ToolRegistry {
         return tools.values();
     }
 
+    /**
+     * Registers a tool discovered at runtime (e.g. from an MCP server), so it is
+     * dispatched identically to compile-time {@link AgentTool} beans. Later
+     * registrations override an existing tool of the same name.
+     */
+    public void register(AgentTool tool) {
+        tools.put(tool.name(), tool);
+    }
+
     public Mono<String> execute(String name, JsonNode input) {
         AgentTool tool = tools.get(name);
         if (tool == null) {

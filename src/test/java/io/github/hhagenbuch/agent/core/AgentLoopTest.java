@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AgentLoopTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private final AgentProperties props = new AgentProperties("", "test-model", 512, 3, 1);
+    private final AgentProperties props = new AgentProperties("", "test-model", 512, 3, 1, List.of());
     private final ToolRegistry registry = new ToolRegistry(List.of(new CalculatorTool()));
     private final ConversationMemory memory = new ConversationMemory();
 
