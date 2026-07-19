@@ -84,6 +84,9 @@ class AgentLoopTest {
         StepVerifier.create(loop.runStreaming("s4", "hi"))
                 .expectNext("Hel", "lo ", "world")
                 .verifyComplete();
+        // streamed turn is remembered: user + assistant(full streamed answer)
+        assertThat(memory.history("s4")).hasSize(2);
+        assertThat(memory.history("s4").get(1).path("content").asText()).isEqualTo("Hello world");
     }
 
     private LlmResponse textResponse(String text) {

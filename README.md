@@ -64,7 +64,15 @@ curl -N localhost:8080/api/chat/stream \
   --data-urlencode "message=What is 973 * 481? Use your calculator." -G
 ```
 
-Each `delta` event carries a chunk of the answer as it is generated.
+Each `delta` event carries a chunk of the answer as it is generated. The
+streamed turn is written back to session memory once complete, so a streamed
+exchange is remembered exactly like a POSTed one.
+
+> **Tradeoff (MVP):** resolving tools on the non-streaming path first means the
+> final answer is generated once to settle the tool loop, discarded, then
+> regenerated as a stream — roughly **2× the tokens** on a streamed turn. The
+> real fix is to stream from the first call and buffer `tool_use` events until
+> the turn's shape is known; see the roadmap.
 
 ## Mounting MCP servers
 
@@ -103,6 +111,8 @@ skipped, never crashing the agent.
 - [x] Retry/backoff, fallback answers, unit-tested core
 - [x] SSE streaming responses (`text/event-stream`)
 - [x] MCP client: mount any MCP server's tools as `AgentTool`s
+- [ ] Single-pass streaming: stream from the first model call, buffering
+      `tool_use` events, to drop the 2× token cost of the resolve-then-stream path
 - [ ] Structured output mode (JSON schema-constrained answers)
 - [ ] Eval gate in CI via [agent-evals](https://github.com/hhagenbuch/agent-evals)
 

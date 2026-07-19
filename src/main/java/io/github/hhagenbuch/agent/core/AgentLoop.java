@@ -54,14 +54,22 @@ public class AgentLoop {
     /**
      * Streaming variant: resolve any tool calls with the non-streaming path,
      * then stream only the final answer turn as a {@code Flux} of text deltas.
-     * Simplest scope that still exercises real SSE decoding; the streamed turn
-     * is not written back to {@link ConversationMemory}.
+     * Simplest scope that still exercises real SSE decoding.
+     *
+     * <p>The deltas are accumulated and the full answer is appended to
+     * {@link ConversationMemory} once the stream completes, so a streamed turn
+     * is remembered exactly like a non-streamed one — the next request sees a
+     * well-formed transcript, not a dangling user/tool_result turn. Nothing is
+     * persisted if the stream errors, so a failed turn never poisons memory.
      */
     public Flux<String> runStreaming(String sessionId, String userMessage) {
         List<ObjectNode> messages = memory.history(sessionId);
         messages.add(textMessage("user", userMessage));
+        StringBuilder answer = new StringBuilder();
         return resolveTools(messages, 0)
                 .flatMapMany(ready -> llm.chatStream(ready, registry.all()))
+                .doOnNext(answer::append)
+                .doOnComplete(() -> messages.add(textMessage("assistant", answer.toString())))
                 .onErrorResume(e -> Flux.just(
                         "I hit an internal error and could not complete that request: " + e.getMessage()));
     }
