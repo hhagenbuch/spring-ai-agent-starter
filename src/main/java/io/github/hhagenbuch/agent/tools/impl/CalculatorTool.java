@@ -48,7 +48,7 @@ public class CalculatorTool implements AgentTool {
         return Mono.fromSupplier(() -> evaluate(input.path("expression").asText()));
     }
 
-    String evaluate(String expression) {
+    public String evaluate(String expression) {
         Matcher m = BINARY.matcher(expression);
         if (!m.matches()) {
             throw new IllegalArgumentException("unsupported expression: " + expression);
