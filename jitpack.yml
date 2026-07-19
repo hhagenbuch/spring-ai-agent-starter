@@ -1,5 +1,6 @@
-# Build on JDK 21 so JitPack can publish this as a consumable dependency.
+# Build on JDK 21, and use the Maven Wrapper so JitPack builds with a modern
+# Maven (its default is too old for maven-compiler-plugin 3.13).
 jdk:
   - openjdk21
 install:
-  - mvn install -DskipTests
+  - ./mvnw install -DskipTests
