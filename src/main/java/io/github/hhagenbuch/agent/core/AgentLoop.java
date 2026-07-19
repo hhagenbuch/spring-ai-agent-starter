@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.hhagenbuch.agent.config.AgentProperties;
 import io.github.hhagenbuch.agent.llm.LlmClient;
 import io.github.hhagenbuch.agent.llm.LlmResponse;
+import io.github.hhagenbuch.agent.llm.TokenUsage;
 import io.github.hhagenbuch.agent.llm.ToolCall;
 import io.github.hhagenbuch.agent.tools.ToolRegistry;
 import org.springframework.stereotype.Component;
@@ -14,6 +15,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The agentic core: model → (tool calls → results → model)* → answer.
@@ -45,10 +47,11 @@ public class AgentLoop {
         int mark = messages.size();
         messages.add(textMessage("user", userMessage));
         List<String> toolsUsed = new ArrayList<>();
-        return step(messages, 0, toolsUsed)
-                .map(answer -> new AgentResult(answer, List.copyOf(toolsUsed)))
+        AtomicReference<TokenUsage> usage = new AtomicReference<>(TokenUsage.EMPTY);
+        return step(messages, 0, toolsUsed, usage)
+                .map(answer -> new AgentResult(answer, List.copyOf(toolsUsed), usage.get()))
                 .onErrorResume(e -> Mono.just(new AgentResult(
-                        recordFailure(messages, mark, userMessage, e), List.copyOf(toolsUsed))));
+                        recordFailure(messages, mark, userMessage, e), List.copyOf(toolsUsed), usage.get())));
     }
 
     /**
@@ -119,13 +122,15 @@ public class AgentLoop {
                 });
     }
 
-    private Mono<String> step(List<ObjectNode> messages, int depth, List<String> toolsUsed) {
+    private Mono<String> step(List<ObjectNode> messages, int depth, List<String> toolsUsed,
+                              AtomicReference<TokenUsage> usage) {
         if (depth >= props.maxToolIterations()) {
             return Mono.just("Stopped: exceeded the maximum of "
                     + props.maxToolIterations() + " tool iterations.");
         }
         return llm.chat(messages, registry.all())
                 .flatMap(response -> {
+                    usage.updateAndGet(total -> total.plus(response.usage())); // count every model call
                     messages.add(assistantMessage(response));
                     if (!response.wantsTools()) {
                         return Mono.just(response.text());
@@ -135,7 +140,7 @@ public class AgentLoop {
                                 messages.add(results);
                                 return results;
                             })
-                            .then(Mono.defer(() -> step(messages, depth + 1, toolsUsed)));
+                            .then(Mono.defer(() -> step(messages, depth + 1, toolsUsed, usage)));
                 });
     }
 

@@ -114,7 +114,8 @@ public class AnthropicClient implements LlmClient {
                 default -> { /* ignore unknown block types */ }
             }
         }
-        return new LlmResponse(text.toString(), toolCalls, content, response.path("stop_reason").asText());
+        return new LlmResponse(text.toString(), toolCalls, content, response.path("stop_reason").asText(),
+                TokenUsage.from(response.path("usage")));
     }
 
     private static boolean isRetryable(Throwable t) {

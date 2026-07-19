@@ -58,10 +58,12 @@ curl -s localhost:8080/api/chat \
 ```
 
 The model calls the `calculator` tool, gets a grounded result, and answers.
-The response is `{"sessionId", "reply", "toolsUsed"}` — `toolsUsed` is the
-trajectory (tool names in call order), so callers can verify *what the agent
-did*, not just what it said. Add a tool by implementing `AgentTool` and
-annotating it `@Component` — no other wiring.
+The response is `{"sessionId", "reply", "toolsUsed", "usage"}` — `toolsUsed` is
+the trajectory (tool names in call order), and `usage` is the token count
+totalled across every model call in the turn (`inputTokens`, `outputTokens`,
+`cacheCreationInputTokens`, `cacheReadInputTokens`), so callers can see both
+*what the agent did* and *what it cost*. Add a tool by implementing `AgentTool`
+and annotating it `@Component` — no other wiring.
 
 For token-by-token output, stream the final answer over SSE. Tool calls are
 resolved first on the non-streaming path, then the last model turn streams:
