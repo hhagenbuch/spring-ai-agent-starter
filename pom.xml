@@ -42,6 +42,12 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <!-- Classify the executable fat jar so the MAIN artifact stays a plain
+               library jar. This lets other repos (e.g. agent-blackbox) depend on
+               the starter's interfaces via JitPack; run the app with the -exec jar. -->
+          <classifier>exec</classifier>
+        </configuration>
       </plugin>
     </plugins>
   </build>
