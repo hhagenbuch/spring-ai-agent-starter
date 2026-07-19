@@ -1,0 +1,83 @@
+package io.github.hhagenbuch.agent.core;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.github.hhagenbuch.agent.config.AgentProperties;
+import io.github.hhagenbuch.agent.llm.LlmClient;
+import io.github.hhagenbuch.agent.llm.LlmResponse;
+import io.github.hhagenbuch.agent.llm.ToolCall;
+import io.github.hhagenbuch.agent.tools.ToolRegistry;
+import io.github.hhagenbuch.agent.tools.impl.CalculatorTool;
+import org.junit.jupiter.api.Test;
+import reactor.test.StepVerifier;
+
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class AgentLoopTest {
+
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final AgentProperties props = new AgentProperties("", "test-model", 512, 3, 1);
+    private final ToolRegistry registry = new ToolRegistry(List.of(new CalculatorTool()));
+    private final ConversationMemory memory = new ConversationMemory();
+
+    @Test
+    void plainAnswerPassesThrough() {
+        LlmClient fake = (messages, tools) -> reactor.core.publisher.Mono.just(
+                textResponse("Hello there"));
+        AgentLoop loop = new AgentLoop(fake, registry, memory, props, mapper);
+
+        StepVerifier.create(loop.run("s1", "hi"))
+                .expectNext("Hello there")
+                .verifyComplete();
+        assertThat(memory.history("s1")).hasSize(2); // user + assistant
+    }
+
+    @Test
+    void toolCallRoundTripProducesFinalAnswer() {
+        AtomicInteger turn = new AtomicInteger();
+        LlmClient fake = (messages, tools) -> reactor.core.publisher.Mono.just(
+                turn.getAndIncrement() == 0 ? calculatorCallResponse() : textResponse("The answer is 4"));
+        AgentLoop loop = new AgentLoop(fake, registry, memory, props, mapper);
+
+        StepVerifier.create(loop.run("s2", "what is 2+2?"))
+                .expectNext("The answer is 4")
+                .verifyComplete();
+        // user, assistant(tool_use), user(tool_result), assistant(final)
+        assertThat(memory.history("s2")).hasSize(4);
+    }
+
+    @Test
+    void loopTerminatesAtMaxIterations() {
+        LlmClient alwaysCallsTools = (messages, tools) -> reactor.core.publisher.Mono.just(
+                calculatorCallResponse());
+        AgentLoop loop = new AgentLoop(alwaysCallsTools, registry, memory, props, mapper);
+
+        StepVerifier.create(loop.run("s3", "loop forever"))
+                .expectNextMatches(s -> s.startsWith("Stopped: exceeded"))
+                .verifyComplete();
+    }
+
+    private LlmResponse textResponse(String text) {
+        ArrayNode content = mapper.createArrayNode();
+        ObjectNode block = content.addObject();
+        block.put("type", "text");
+        block.put("text", text);
+        return new LlmResponse(text, List.of(), content, "end_turn");
+    }
+
+    private LlmResponse calculatorCallResponse() {
+        ObjectNode input = mapper.createObjectNode();
+        input.put("expression", "2 + 2");
+        ArrayNode content = mapper.createArrayNode();
+        ObjectNode block = content.addObject();
+        block.put("type", "tool_use");
+        block.put("id", "tu_1");
+        block.put("name", "calculator");
+        block.set("input", input);
+        return new LlmResponse("", List.of(new ToolCall("tu_1", "calculator", input)), content, "tool_use");
+    }
+}
