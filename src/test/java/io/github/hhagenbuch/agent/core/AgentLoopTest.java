@@ -7,11 +7,15 @@ import io.github.hhagenbuch.agent.config.AgentProperties;
 import io.github.hhagenbuch.agent.llm.LlmClient;
 import io.github.hhagenbuch.agent.llm.LlmResponse;
 import io.github.hhagenbuch.agent.llm.ToolCall;
+import io.github.hhagenbuch.agent.tools.AgentTool;
 import io.github.hhagenbuch.agent.tools.ToolRegistry;
 import io.github.hhagenbuch.agent.tools.impl.CalculatorTool;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -58,6 +62,26 @@ class AgentLoopTest {
 
         StepVerifier.create(loop.run("s3", "loop forever"))
                 .expectNextMatches(s -> s.startsWith("Stopped: exceeded"))
+                .verifyComplete();
+    }
+
+    @Test
+    void streamingEmitsFinalAnswerDeltas() {
+        LlmClient fake = new LlmClient() {
+            @Override
+            public Mono<LlmResponse> chat(List<ObjectNode> messages, Collection<AgentTool> tools) {
+                return Mono.just(textResponse("ignored — streamed turn regenerates the answer"));
+            }
+
+            @Override
+            public Flux<String> chatStream(List<ObjectNode> messages, Collection<AgentTool> tools) {
+                return Flux.just("Hel", "lo ", "world");
+            }
+        };
+        AgentLoop loop = new AgentLoop(fake, registry, memory, props, mapper);
+
+        StepVerifier.create(loop.runStreaming("s4", "hi"))
+                .expectNext("Hel", "lo ", "world")
                 .verifyComplete();
     }
 

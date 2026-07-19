@@ -6,9 +6,13 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.hhagenbuch.agent.config.AgentProperties;
 import io.github.hhagenbuch.agent.tools.AgentTool;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
@@ -36,6 +40,31 @@ public class AnthropicClient implements LlmClient {
 
     @Override
     public Mono<LlmResponse> chat(List<ObjectNode> messages, Collection<AgentTool> tools) {
+        return webClient.post()
+                .uri("/v1/messages")
+                .bodyValue(buildBody(messages, tools))
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .map(this::parse)
+                .retryWhen(Retry.backoff(props.maxRetries(), Duration.ofMillis(500))
+                        .filter(AnthropicClient::isRetryable));
+    }
+
+    @Override
+    public Flux<String> chatStream(List<ObjectNode> messages, Collection<AgentTool> tools) {
+        ObjectNode body = buildBody(messages, tools);
+        body.put("stream", true);
+        return webClient.post()
+                .uri("/v1/messages")
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .bodyValue(body)
+                .retrieve()
+                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
+                .mapNotNull(this::textDelta)
+                .filter(delta -> !delta.isEmpty());
+    }
+
+    private ObjectNode buildBody(List<ObjectNode> messages, Collection<AgentTool> tools) {
         ObjectNode body = mapper.createObjectNode();
         body.put("model", props.model());
         body.put("max_tokens", props.maxTokens());
@@ -50,14 +79,25 @@ public class AnthropicClient implements LlmClient {
                 t.set("input_schema", tool.inputSchema(mapper));
             }
         }
-        return webClient.post()
-                .uri("/v1/messages")
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .map(this::parse)
-                .retryWhen(Retry.backoff(props.maxRetries(), Duration.ofMillis(500))
-                        .filter(AnthropicClient::isRetryable));
+        return body;
+    }
+
+    /** Extracts the text from a {@code content_block_delta} SSE event; null for other events. */
+    private String textDelta(ServerSentEvent<String> event) {
+        String data = event.data();
+        if (data == null) {
+            return null;
+        }
+        try {
+            JsonNode node = mapper.readTree(data);
+            if ("content_block_delta".equals(node.path("type").asText())
+                    && "text_delta".equals(node.path("delta").path("type").asText())) {
+                return node.path("delta").path("text").asText();
+            }
+        } catch (Exception e) {
+            // ignore malformed/heartbeat lines
+        }
+        return null;
     }
 
     private LlmResponse parse(JsonNode response) {

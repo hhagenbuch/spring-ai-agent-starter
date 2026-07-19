@@ -54,6 +54,16 @@ The model calls the `calculator` tool, gets a grounded result, and answers.
 Add a tool by implementing `AgentTool` and annotating it `@Component` — no
 other wiring.
 
+For token-by-token output, stream the final answer over SSE. Tool calls are
+resolved first on the non-streaming path, then the last model turn streams:
+
+```bash
+curl -N localhost:8080/api/chat/stream \
+  --data-urlencode "message=What is 973 * 481? Use your calculator." -G
+```
+
+Each `delta` event carries a chunk of the answer as it is generated.
+
 ## Design decisions
 
 - **Why recursion for the loop?** Each `step` is a `Mono` continuation —
@@ -70,7 +80,7 @@ other wiring.
 
 - [x] Bounded reactive tool loop with concurrent tool execution
 - [x] Retry/backoff, fallback answers, unit-tested core
-- [ ] SSE streaming responses (`text/event-stream`)
+- [x] SSE streaming responses (`text/event-stream`)
 - [ ] MCP client: mount any MCP server's tools as `AgentTool`s
 - [ ] Structured output mode (JSON schema-constrained answers)
 - [ ] Eval gate in CI via [agent-evals](https://github.com/hhagenbuch/agent-evals)

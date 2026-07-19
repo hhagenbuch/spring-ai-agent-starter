@@ -47,6 +47,43 @@ public class AgentLoop {
                         "I hit an internal error and could not complete that request: " + e.getMessage()));
     }
 
+    /**
+     * Streaming variant: resolve any tool calls with the non-streaming path,
+     * then stream only the final answer turn as a {@code Flux} of text deltas.
+     * Simplest scope that still exercises real SSE decoding; the streamed turn
+     * is not written back to {@link ConversationMemory}.
+     */
+    public Flux<String> runStreaming(String sessionId, String userMessage) {
+        List<ObjectNode> messages = memory.history(sessionId);
+        messages.add(textMessage("user", userMessage));
+        return resolveTools(messages, 0)
+                .flatMapMany(ready -> llm.chatStream(ready, registry.all()))
+                .onErrorResume(e -> Flux.just(
+                        "I hit an internal error and could not complete that request: " + e.getMessage()));
+    }
+
+    /**
+     * Drives the model → tools loop until the model stops requesting tools,
+     * returning the message list ready for the final answer turn. The final
+     * (non-tool) response is intentionally not appended, so the streaming call
+     * regenerates that answer from the same context.
+     */
+    private Mono<List<ObjectNode>> resolveTools(List<ObjectNode> messages, int depth) {
+        if (depth >= props.maxToolIterations()) {
+            return Mono.just(messages);
+        }
+        return llm.chat(messages, registry.all())
+                .flatMap(response -> {
+                    if (!response.wantsTools()) {
+                        return Mono.just(messages);
+                    }
+                    messages.add(assistantMessage(response));
+                    return executeTools(response.toolCalls())
+                            .doOnNext(messages::add)
+                            .then(Mono.defer(() -> resolveTools(messages, depth + 1)));
+                });
+    }
+
     private Mono<String> step(List<ObjectNode> messages, int depth) {
         if (depth >= props.maxToolIterations()) {
             return Mono.just("Stopped: exceeded the maximum of "
