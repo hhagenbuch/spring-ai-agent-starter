@@ -36,7 +36,7 @@ public class ChatController {
                 ? request.sessionId()
                 : UUID.randomUUID().toString();
         return agentLoop.run(sessionId, request.message())
-                .map(result -> new ChatResponse(sessionId, result.answer(), result.toolsUsed()));
+                .map(result -> new ChatResponse(sessionId, result.answer(), result.toolsUsed(), result.usage()));
     }
 
     // SSE over GET keeps the browser EventSource client trivial, but the message

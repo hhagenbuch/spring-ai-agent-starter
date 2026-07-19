@@ -12,8 +12,15 @@ import java.util.List;
  * @param rawContent  the raw {@code content} array from the API, replayed verbatim as the
  *                    assistant message when continuing the conversation
  * @param stopReason  the API stop reason ({@code end_turn}, {@code tool_use}, ...)
+ * @param usage       token counts for this call (never null; {@link TokenUsage#EMPTY} if absent)
  */
-public record LlmResponse(String text, List<ToolCall> toolCalls, JsonNode rawContent, String stopReason) {
+public record LlmResponse(String text, List<ToolCall> toolCalls, JsonNode rawContent,
+                          String stopReason, TokenUsage usage) {
+
+    /** Convenience for callers/tests that don't supply usage (defaults to {@link TokenUsage#EMPTY}). */
+    public LlmResponse(String text, List<ToolCall> toolCalls, JsonNode rawContent, String stopReason) {
+        this(text, toolCalls, rawContent, stopReason, TokenUsage.EMPTY);
+    }
 
     public boolean wantsTools() {
         return toolCalls != null && !toolCalls.isEmpty();

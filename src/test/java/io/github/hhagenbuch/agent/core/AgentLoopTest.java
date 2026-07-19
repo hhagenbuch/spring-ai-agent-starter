@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.hhagenbuch.agent.config.AgentProperties;
 import io.github.hhagenbuch.agent.llm.LlmClient;
 import io.github.hhagenbuch.agent.llm.LlmResponse;
+import io.github.hhagenbuch.agent.llm.TokenUsage;
 import io.github.hhagenbuch.agent.llm.ToolCall;
 import io.github.hhagenbuch.agent.tools.AgentTool;
 import io.github.hhagenbuch.agent.tools.ToolRegistry;
@@ -53,6 +54,24 @@ class AgentLoopTest {
                 .verifyComplete();
         // user, assistant(tool_use), user(tool_result), assistant(final)
         assertThat(memory.history("s2")).hasSize(4);
+    }
+
+    @Test
+    void usageIsTotalledAcrossEveryModelCallInTheTurn() {
+        AtomicInteger turn = new AtomicInteger();
+        LlmClient fake = (messages, tools) -> Mono.just(turn.getAndIncrement() == 0
+                ? withUsage(calculatorCallResponse(), 100, 20)      // first model call (tool_use)
+                : withUsage(textResponse("The answer is 4"), 50, 10)); // second (final answer)
+        AgentLoop loop = new AgentLoop(fake, registry, memory, props, mapper);
+
+        StepVerifier.create(loop.run("s6", "what is 2+2?"))
+                .expectNextMatches(r -> r.usage().inputTokens() == 150 && r.usage().outputTokens() == 30)
+                .verifyComplete();
+    }
+
+    private LlmResponse withUsage(LlmResponse r, long inputTokens, long outputTokens) {
+        return new LlmResponse(r.text(), r.toolCalls(), r.rawContent(), r.stopReason(),
+                new TokenUsage(inputTokens, outputTokens, 0, 0));
     }
 
     @Test
