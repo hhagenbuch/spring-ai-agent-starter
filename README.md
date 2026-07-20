@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/hhagenbuch/spring-ai-agent-starter/actions/workflows/ci.yml/badge.svg)](https://github.com/hhagenbuch/spring-ai-agent-starter/actions)
 ![Java 25](https://img.shields.io/badge/Java-25-blue)
-![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5-green)
+![Spring Boot 4.1](https://img.shields.io/badge/Spring%20Boot-4.1-green)
 
 A production-shaped **agentic service in Java**: a bounded, fully reactive
 tool-calling loop on Spring WebFlux against the Anthropic Messages API.

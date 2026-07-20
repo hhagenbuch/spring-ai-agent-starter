@@ -1,6 +1,6 @@
 package io.github.hhagenbuch.agent.tools;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.github.hhagenbuch.agent.tools.impl.CalculatorTool;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;

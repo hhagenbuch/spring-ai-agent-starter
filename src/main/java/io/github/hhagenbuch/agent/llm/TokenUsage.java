@@ -1,6 +1,6 @@
 package io.github.hhagenbuch.agent.llm;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 
 /**
  * Token counts from an Anthropic response's {@code usage} object. Exposed so callers

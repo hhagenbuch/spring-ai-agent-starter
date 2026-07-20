@@ -1,7 +1,7 @@
 package io.github.hhagenbuch.agent.mcp;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.hhagenbuch.agent.tools.ToolRegistry;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;

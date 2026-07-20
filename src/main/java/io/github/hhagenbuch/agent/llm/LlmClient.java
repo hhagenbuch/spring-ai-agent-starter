@@ -1,6 +1,6 @@
 package io.github.hhagenbuch.agent.llm;
 
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.node.ObjectNode;
 import io.github.hhagenbuch.agent.tools.AgentTool;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
