@@ -1,6 +1,6 @@
 package io.github.hhagenbuch.agent.core;
 
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
