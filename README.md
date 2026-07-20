@@ -1,8 +1,8 @@
 # spring-ai-agent-starter
 
 [![CI](https://github.com/hhagenbuch/spring-ai-agent-starter/actions/workflows/ci.yml/badge.svg)](https://github.com/hhagenbuch/spring-ai-agent-starter/actions)
-![Java 21](https://img.shields.io/badge/Java-21-blue)
-![Spring Boot 3.3](https://img.shields.io/badge/Spring%20Boot-3.3-green)
+![Java 25](https://img.shields.io/badge/Java-25-blue)
+![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5-green)
 
 A production-shaped **agentic service in Java**: a bounded, fully reactive
 tool-calling loop on Spring WebFlux against the Anthropic Messages API.
@@ -15,17 +15,19 @@ crashing the loop, and a unit-tested core with no API key required.
 
 ## Architecture
 
-```
-POST /api/chat
-      │
-      ▼
-ChatController ──► AgentLoop ──► LlmClient (Anthropic, retry/backoff)
-                      │  ▲
-             tool_use │  │ tool_result
-                      ▼  │
-                  ToolRegistry ──► AgentTool beans (calculator, clock, ...)
-                      │
-              ConversationMemory (per-session)
+```mermaid
+flowchart LR
+    U[POST /api/chat] --> C[ChatController]
+    C --> L[AgentLoop<br/>bounded reactive loop]
+    L -->|messages| A[LlmClient · AnthropicClient<br/>retry / backoff]
+    A -->|tool_use| L
+    L -->|dispatch| TR[ToolRegistry]
+    TR --> T1[AgentTool beans<br/>calculator · clock · …]
+    TR --> MCP[McpToolAdapter<br/>mounted MCP servers]
+    T1 -->|tool_result| L
+    MCP -->|tool_result| L
+    L <--> M[(ConversationMemory<br/>per session)]
+    L --> R[reply · toolsUsed · usage]
 ```
 
 - **`AgentLoop`** — the core: model → tool calls → results → model, until
