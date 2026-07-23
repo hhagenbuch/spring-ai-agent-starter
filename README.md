@@ -96,6 +96,8 @@ agent:
   mcp-servers:
     - name: filesystem
       command: [npx, -y, "@modelcontextprotocol/server-filesystem", /tmp]
+    - name: fathom            # agnostic, verified context engine
+      command: [java, -jar, /abs/path/fathom.jar, serve, --config, /abs/path/fathom.yaml]
 ```
 
 On startup, `McpConnectionManager` launches each server over stdio, runs the
@@ -103,6 +105,12 @@ JSON-RPC handshake (`initialize` → `tools/list`), and wraps every discovered
 tool as an `McpToolAdapter`. `tools/call` round-trips run off the event loop on
 the bounded-elastic scheduler. A server that fails to start is logged and
 skipped, never crashing the agent.
+
+Mounting [fathom](https://github.com/hhagenbuch/fathom) this way gives the agent
+a verified context layer: `search` / `blast_radius` / `impacted_by` /
+`contract_surface` and a `verify` tool that admits a stale index instead of
+answering from it. `FathomMcpMountTest` drives fathom's six-tool contract through
+the mount end to end (against a JDK-only stub, so no cross-repo build in CI).
 
 ## Design decisions
 
