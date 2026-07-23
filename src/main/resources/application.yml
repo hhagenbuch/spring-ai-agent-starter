@@ -5,10 +5,12 @@ agent:
   max-tool-iterations: 6
   max-retries: 3
   # Mount external MCP servers over stdio; their tools join the registry
-  # alongside the local ones. Example:
+  # alongside the local ones. Examples:
   # mcp-servers:
   #   - name: filesystem
   #     command: [npx, -y, "@modelcontextprotocol/server-filesystem", /tmp]
+  #   - name: fathom            # agnostic, verified context engine (search/blast_radius/impacted_by/verify)
+  #     command: [java, -jar, /abs/path/fathom.jar, serve, --config, /abs/path/fathom.yaml]
 
 management:
   endpoints:
